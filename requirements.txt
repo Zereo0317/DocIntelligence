@@ -1,0 +1,47 @@
+# PDF Processing
+pymupdf==1.24.14
+
+# Document Layout Analysis
+doclayout-yolo
+opencv-python
+huggingface-hub>=0.19.0
+
+# Google Cloud
+google-cloud-vision
+google-cloud-storage
+google-cloud-bigquery
+google-cloud-aiplatform
+cloud-sql-python-connector
+google-cloud-core
+
+# Vector Processing
+numpy
+scikit-learn
+
+# RAG System
+langchain>=0.1.0  # Core LangChain functionality
+langchain-core>=0.1.0  # LangChain core components
+langchain-google-vertexai>=0.0.1  # For Vertex AI integration
+langgraph>=0.0.15  # For building LangChain graphs
+langchain-community>=0.0.1  # For community integrations
+chromadb>=0.4.0  # Vector store
+
+# General utilities
+Pillow
+python-dotenv>=0.19.0  # For environment variables
+pydantic>=2.5.0  # Compatible with Python 3.12
+uuid
+tqdm  # For progress bars
+typing-extensions>=4.5.0  # For advanced type hints
+
+# Temporarily import Anthropic package
+langchain_anthropic
+
+python-dotenv
+nicegui
+
+
+# For CloudSQL
+pymysql
+sqlalchemy
+cloud-sql-python-connector
