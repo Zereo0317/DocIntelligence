@@ -26,7 +26,7 @@ class LayoutAnalyzer:
             logger.info("Loading YOLO model...")
             try:
                 logger.info("Attempting to load model using from_pretrained...")
-                self.device = "cuda:0" if use_gpu else "cpu"
+                self.device = "cuda:1" if use_gpu else "cpu"
                 self.model = YOLOv10.from_pretrained("juliozhao/DocLayout-YOLO-DocStructBench", device=self.device)
             except Exception as e1:
                 logger.warning(f"from_pretrained failed: {str(e1)}")
@@ -753,17 +753,16 @@ class LayoutAnalyzer:
 if __name__ == "__main__":
     from pathlib import Path
     # Example usage with three pages (possibly with different columns)
-    pdf_paths = [
-        Path('test_document/black modern corporate Resume.pdf'),
-        Path('test_document/Simple Professional CV Resume.pdf'),
-        Path('test_document/2407.21059v1.pdf')
+    image_paths = [
+        Path('/path/to/acl_page_1.png'),
+        Path('/path/to/acl_page_2.png'),
+        Path('/path/to/resume_page.png')
     ]
-
     output_dir = Path('./labeled_outputs')
     output_dir.mkdir(parents=True, exist_ok=True)
 
     analyzer = LayoutAnalyzer(use_gpu=True)
-    all_results = analyzer.analyze_all_pages(pdf_paths, output_dir, debug=True)
+    all_results = analyzer.analyze_all_pages(image_paths, output_dir, debug=True)
 
     print("=== Analysis Complete ===")
     for i, page_dict in enumerate(all_results, start=1):
