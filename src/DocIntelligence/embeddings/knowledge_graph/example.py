@@ -1,4 +1,6 @@
-This is others approach on building knowledge graph:
+# <What is this...?>
+
+
 """Entity-Relationship extraction module."""
 import asyncio
 import re
@@ -269,7 +271,8 @@ class BaseEmbeddingService:
         raise NotImplementedError
 
 
-This is how others design their prompt. You should make it suitable for generating concept behavior graph
+# =============================================================================
+
 """Prompts."""
 
 from typing import Any, Dict

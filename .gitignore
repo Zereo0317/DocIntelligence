@@ -1,0 +1,22 @@
+*.env
+*__pycache__*
+*.egg-info
+*.pyi
+*.pyc
+*.pdf
+*.pt
+*.cache
+*.json
+
+# Any generated file in the test directory
+test/*
+
+# But do not ignore the python files in test directory
+!test/*.py
+
+# Image files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
