@@ -2,10 +2,11 @@ import fitz  # PyMuPDF
 import logging
 from pathlib import Path
 from typing import List
-from src.config import PDF_IMAGE_DPI
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+from DocIntelligence.config import Config
+
 
 class PDFProcessor:
     @staticmethod
@@ -28,7 +29,7 @@ class PDFProcessor:
             for page_num in range(len(doc)):
                 try:
                     page = doc[page_num]
-                    pix = page.get_pixmap(dpi=PDF_IMAGE_DPI)
+                    pix = page.get_pixmap(dpi=Config.PDF_IMAGE_DPI)
                     image_path = pdf_images_dir / f"page_{page_num + 1}.png"
                     pix.save(str(image_path))
                     image_paths.append(image_path)

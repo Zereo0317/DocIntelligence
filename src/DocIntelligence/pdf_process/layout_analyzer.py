@@ -13,29 +13,23 @@ from sklearn.cluster import KMeans, DBSCAN
 from sklearn.mixture import GaussianMixture
 from sklearn.metrics import silhouette_score
 
-from src.config import YOLO_CONF_THRESHOLD, YOLO_IMAGE_SIZE
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+from DocIntelligence.config import Config
 
 
 class LayoutAnalyzer:
     def __init__(self, use_gpu: bool = False):
         """Initialize the YOLO model for document layout analysis."""
         try:
-            logger.info("Loading YOLO model...")
-            try:
-                logger.info("Attempting to load model using from_pretrained...")
-                self.device = "cuda:1" if use_gpu else "cpu"
-                self.model = YOLOv10.from_pretrained("juliozhao/DocLayout-YOLO-DocStructBench", device=self.device)
-            except Exception as e1:
-                logger.warning(f"from_pretrained failed: {str(e1)}")
-                logger.info("Attempting alternative loading method from hf_hub_download...")
-                filepath = hf_hub_download(
-                    repo_id="juliozhao/DocLayout-YOLO-DocStructBench",
-                    filename="doclayout_yolo_docstructbench_imgsz1024.pt"
-                )
-                self.model = YOLOv10(filepath)
+            logger.info("Loading YOLO model from hf_hub_download...")
+            filepath = hf_hub_download(
+                repo_id="juliozhao/DocLayout-YOLO-DocStructBench",
+                filename="doclayout_yolo_docstructbench_imgsz1024.pt",
+                local_dir=Config.ROOT_DIR / "models",
+            )
+            self.device = "cuda:0" if use_gpu else "cpu"
+            self.model = YOLOv10(filepath)
             logger.info("YOLO model loaded successfully.")
         except Exception as e:
             logger.error(f"Error loading YOLO model: {str(e)}")
@@ -469,8 +463,8 @@ class LayoutAnalyzer:
             # YOLO inference
             det_res = self.model.predict(
                 image,
-                imgsz=YOLO_IMAGE_SIZE,
-                conf=YOLO_CONF_THRESHOLD,
+                imgsz=Config.YOLO_IMAGE_SIZE,
+                conf=Config.YOLO_CONF_THRESHOLD,
                 device=self.device
             )
 

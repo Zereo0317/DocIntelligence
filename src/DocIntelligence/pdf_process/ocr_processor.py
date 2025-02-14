@@ -4,18 +4,18 @@ from typing import Dict, Any, Optional, List
 from google.cloud import vision
 from google.cloud import storage
 
-from src.config import GCP_PROJECT_ID, GCP_BUCKET_NAME, GCP_LOCATION, OUTPUT_DIR
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+from DocIntelligence.config import Config
+
 
 class OCRProcessor:
     def __init__(self):
         """Initialize Google Cloud Vision client"""
         try:
             self.vision_client = vision.ImageAnnotatorClient()
-            self.storage_client = storage.Client(project=GCP_PROJECT_ID)
-            self.bucket = self.storage_client.bucket(GCP_BUCKET_NAME)
+            self.storage_client = storage.Client(project=Config.GCP_PROJECT_ID)
+            self.bucket = self.storage_client.bucket(Config.GCP_BUCKET_NAME)
             logger.info("Google Cloud Vision client initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing Google Cloud Vision client: {str(e)}")
@@ -27,7 +27,7 @@ class OCRProcessor:
             blob_name = f"temp/{image_path.name}"
             blob = self.bucket.blob(blob_name)
             blob.upload_from_filename(str(image_path))
-            return f"gs://{GCP_BUCKET_NAME}/{blob_name}"
+            return f"gs://{Config.GCP_BUCKET_NAME}/{blob_name}"
         except Exception as e:
             logger.error(f"Error uploading to GCS: {str(e)}")
             return None
@@ -35,7 +35,7 @@ class OCRProcessor:
     def _delete_from_gcs(self, gcs_uri: str):
         """Delete temporary image from Google Cloud Storage"""
         try:
-            blob_name = gcs_uri.split(f"gs://{GCP_BUCKET_NAME}/")[1]
+            blob_name = gcs_uri.split(f"gs://{Config.GCP_BUCKET_NAME}/")[1]
             blob = self.bucket.blob(blob_name)
             blob.delete()
         except Exception as e:

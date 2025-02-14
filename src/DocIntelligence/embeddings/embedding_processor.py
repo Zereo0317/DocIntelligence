@@ -8,10 +8,10 @@ import numpy as np
 import uuid
 import json
 
-from src.config import GCP_BIGQUERY_INSERT_BATCH, GCP_BUCKET_NAME, GCP_DATASET_ID, GCP_CONNECTION_ID
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+from DocIntelligence.config import Config
+
 
 class EmbeddingProcessor:
     def __init__(self, project_id: str, location: str = "us-central1"):
@@ -25,9 +25,8 @@ class EmbeddingProcessor:
         try:
             self.project_id = project_id
             self.location = location
-            self.dataset_id = GCP_DATASET_ID  # 資料集名稱
-
-            self.connection_id = GCP_CONNECTION_ID
+            self.dataset_id = Config.GCP_DATASET_ID  # 資料集名稱
+            self.connection_id = Config.GCP_CONNECTION_ID
             self.connection_string = f"{project_id}.{location}.{self.connection_id}"
 
             # Initialize Vertex AI
@@ -48,7 +47,7 @@ class EmbeddingProcessor:
 
     def _handle_text_embedding(self, content: str, model_name: str) -> List[Any]:
         """
-        處理文字內容的 embedding 生成
+        Process text content embedding generation
         """
         query = f"""
         SELECT * FROM ML.GENERATE_EMBEDDING(
@@ -68,22 +67,22 @@ class EmbeddingProcessor:
 
     def _handle_image_embedding(self, content: str, model_name: str) -> List[Any]:
         """
-        處理圖片內容的 embedding 生成
+        Process image content embedding generation
         
         Args:
-            content: 圖片的 GCS URI
-            model_name: 模型的完整名稱
+            content: GCS URI of the image
+            model_name: Full name of the model
             
         Returns:
-            List[Any]: 包含生成的 embedding 結果的列表
+            List[Any]: List of embedding results
         """
         if not isinstance(content, str) or not content.startswith('gs://'):
-            raise ValueError(f"Image content must be a valid GCS URI")
+            raise ValueError("Image content must be a valid GCS URI")
         
-        # 創建臨時表格
+        # Create temporary table
         temp_table_id = f"{self.project_id}.{self.dataset_id}.temp_uri_table_{str(uuid.uuid4()).replace('-', '_')}"
     
-        # 創建表格並插入數據
+        # Create table and insert data
         create_table_query = f"""
         CREATE OR REPLACE EXTERNAL TABLE `{temp_table_id}`
         WITH CONNECTION `{self.project_id}.US.{self.connection_id}`
@@ -93,7 +92,7 @@ class EmbeddingProcessor:
         );
         """
         
-        # 生成 embedding
+        # Generate embedding
         embedding_query = f"""
         SELECT * FROM ML.GENERATE_EMBEDDING(
             MODEL `{model_name}`,
@@ -130,64 +129,66 @@ class EmbeddingProcessor:
 
 
     def generate_embeddings(self, content: Union[str, Path], content_type: str, 
-                        metadata: Optional[Dict[str, Any]] = None) -> Union[List[Dict[str, Any]], Dict[str, Any], None]:
+                            metadata: Optional[Dict[str, Any]] = None,
+                            chunk_size: int = 900, chunk_overlap: int = 100,
+                            store_to_db: bool = True) -> Union[List[Dict[str, Any]], Dict[str, Any], None]:
         """
-        為給定內容生成 embeddings。  
-        若為文字類型且內容過長，會先進行分塊，對每個塊產生 embedding 並加入緩存 (embedding_buffer)。  
-        若為影像類型，則直接產生單一 embedding 並加入緩存。  
-        所有 embedding 都不會立即寫入 BigQuery，而是等到 batch_insert_embeddings() 被呼叫時一次性寫入。
-
+        Generate embeddings for the given content.
+        If the content is text and its length exceeds chunk_size, it will be split into chunks
+        using RecursiveCharacterTextSplitter with the provided chunk_size and chunk_overlap.
+        
+        If store_to_db is True, it will generate embeddings normally using the model.
+        If store_to_db is False, for text content it will NOT generate embeddings;
+        instead, it stores the original text and sets the vector to an empty string.
+        
         Args:
-            content (Union[str, Path]): 要產生 embedding 的內容 (文字或圖片 GCS URI)。
-            content_type (str): 內容的類型，如 'Text', 'Table', 'Picture' 等。
-            metadata (Optional[Dict[str, Any]]): 此 embedding 關聯的來源資訊 (如 doc_id, page_num, element_id...)。
-
+            content (Union[str, Path]): The content (text or image GCS URI) to embed.
+            content_type (str): Type of the content, e.g., 'Text', 'Table', etc.
+            metadata (Optional[Dict[str, Any]]): Metadata associated with the content.
+            chunk_size (int): Maximum chunk size for text splitting.
+            chunk_overlap (int): Overlap between chunks.
+            store_to_db (bool): Flag to determine if embeddings should be generated and uploaded.
+            
         Returns:
-            List[Dict[str, Any]] or Dict[str, Any] or None:
-            - 若分塊後的文字內容，會返回一個 embedding dict list。
-            - 若為單一 embedding (短文本或圖片)，回傳單一 embedding dict。
-            - 若 store_in_bigquery 為 False，則返回 None。
+            List or Dict containing embedding information.
         """
         try:
             logger.info(f"Generating embeddings for content_type={content_type}")
             
-            if metadata and not metadata.get('store_in_bigquery', True):
-                logger.info(f"Skipping embedding generation for {content_type}")
-                return None
-
-            model_name = f"{self.project_id}.{self.dataset_id}.multimodal_embedding_model"
-            
-            # 對於文本內容，處理可能的分塊
+            # For text content types
             if content_type in ['Text', 'Caption', 'Title', 'Footnote', 'Table', "Formula"]:
+                # If store_to_db is True, we use the embedding model; otherwise, we skip embedding generation.
+                if store_to_db:
+                    model_name = f"{self.project_id}.{self.dataset_id}.multimodal_embedding_model"
                 
-                # 如果內容太長，進行分塊
-                if isinstance(content, str) and len(content) > 900:
+                if isinstance(content, str) and len(content) > chunk_size:
                     text_splitter = RecursiveCharacterTextSplitter(
-                        chunk_size=900,
-                        chunk_overlap=100
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap
                     )
                     chunks = text_splitter.split_text(content)
                     
-                    # 為每個 chunk 生成 embedding
                     embeddings = []
                     for i, chunk in enumerate(chunks):
-                        # 如果有 metadata，為每個 chunk 創建新的 metadata
                         chunk_metadata = metadata.copy() if metadata else {}
-                        if chunk_metadata:
-                            chunk_metadata['chunk_index'] = i
-                        
-                        result = self._handle_text_embedding(chunk, model_name)
-                        if not result:
-                            continue
-                            
-                        # 正常來說 result[0].ml_generate_embedding_result 應包含 embedding vector
-                        embedding_vector = result[0].ml_generate_embedding_result
+                        chunk_metadata['chunk_index'] = i
                         embedding_id = str(uuid.uuid4())
-
-                        # 將 embedding 資料存入 buffer 而非立即寫入 BigQuery
+                        
+                        if store_to_db:
+                            # Generate embedding using the model
+                            result = self._handle_text_embedding(chunk, model_name)
+                            if not result:
+                                continue
+                            embedding_vector = result[0].ml_generate_embedding_result
+                        else:
+                            # Do not generate embedding; store original text with empty vector
+                            embedding_vector = ""
+                        
+                        # Store embedding data in buffer
                         self.embedding_buffer.append({
                             "embedding_id": embedding_id,
                             "vector": embedding_vector,
+                            "original_text": chunk,
                             "content_type": content_type,
                             "doc_id": chunk_metadata.get('doc_id'),
                             "page_num": chunk_metadata.get('page_num'),
@@ -195,43 +196,69 @@ class EmbeddingProcessor:
                             "mapped_to_element_id": chunk_metadata.get('mapped_to'),
                             "coordinates": chunk_metadata.get('coordinates')
                         })
-
+                        
                         embeddings.append({
                             'embedding_id': embedding_id,
                             'vector': embedding_vector,
-                            'chunk': chunk
+                            'original_text': chunk,
                         })
-
                     return embeddings
                     
-                # 如果內容夠短，直接生成單個 embedding
-                results = self._handle_text_embedding(str(content), model_name)
-                
+                else:
+                    # Content is short; treat as a single chunk
+                    embedding_id = str(uuid.uuid4())
+                    if store_to_db:
+                        model_name = f"{self.project_id}.{self.dataset_id}.multimodal_embedding_model"
+                        result = self._handle_text_embedding(str(content), model_name)
+                        if not result:
+                            raise ValueError("No embedding generated")
+                        embedding_vector = result[0].ml_generate_embedding_result
+                    else:
+                        embedding_vector = ""
+                    
+                    self.embedding_buffer.append({
+                        "embedding_id": embedding_id,
+                        "vector": embedding_vector,
+                        "original_text": str(content),
+                        "content_type": content_type,
+                        "doc_id": metadata.get('doc_id') if metadata else None,
+                        "page_num": metadata.get('page_num') if metadata else None,
+                        "element_id": metadata.get('element_id') if metadata else None,
+                        "mapped_to_element_id": metadata.get('mapped_to') if metadata else None,
+                        "coordinates": metadata.get('coordinates') if metadata else None
+                    })
+                    return [{
+                        'embedding_id': embedding_id,
+                        'vector': embedding_vector,
+                        'original_text': str(content)
+                    }]
+            
             else:
-                # 處理圖片內容
-                results = self._handle_image_embedding(str(content), model_name)
-            
-            if not results:
-                raise ValueError("No embedding generated")
-                
-            embedding_vector = results[0].ml_generate_embedding_result
-            embedding_id = str(uuid.uuid4())
-            
-            self.embedding_buffer.append({
-                "embedding_id": embedding_id,
-                "vector": embedding_vector,
-                "content_type": content_type,
-                "doc_id": metadata.get('doc_id') if metadata else None,
-                "page_num": metadata.get('page_num') if metadata else None,
-                "element_id": metadata.get('element_id') if metadata else None,
-                "mapped_to_element_id": metadata.get('mapped_to') if metadata else None,
-                "coordinates": metadata.get('coordinates') if metadata else None
-            })
-
-            return {
-                'embedding_id': embedding_id,
-                'vector': embedding_vector
-            }
+                # For non-text content (e.g., images)
+                if store_to_db:
+                    model_name = f"{self.project_id}.{self.dataset_id}.multimodal_embedding_model"
+                    results = self._handle_image_embedding(str(content), model_name)
+                    if not results:
+                        raise ValueError("No embedding generated")
+                    embedding_vector = results[0].ml_generate_embedding_result
+                else:
+                    embedding_vector = ""
+                embedding_id = str(uuid.uuid4())
+                self.embedding_buffer.append({
+                    "embedding_id": embedding_id,
+                    "vector": embedding_vector,
+                    "content_type": content_type,
+                    "doc_id": metadata.get('doc_id') if metadata else None,
+                    "page_num": metadata.get('page_num') if metadata else None,
+                    "element_id": metadata.get('element_id') if metadata else None,
+                    "mapped_to_element_id": metadata.get('mapped_to') if metadata else None,
+                    "coordinates": metadata.get('coordinates') if metadata else None
+                })
+                return [{
+                    'embedding_id': embedding_id,
+                    'vector': embedding_vector,
+                    'original_text': str(content)
+                }]
                 
         except Exception as e:
             logger.error("Error generating embeddings:")
@@ -240,32 +267,6 @@ class EmbeddingProcessor:
             logger.error(f"Metadata: {metadata}")
             logger.error("Error details:", exc_info=True)
             raise
-
-
-    # def create_multimodal_model(self) -> str:
-    #     """
-    #     Create or get multimodal embedding model
-        
-    #     Returns:
-    #         str: Model resource name
-    #     """
-    #     try:
-    #         model_id = f"{self.project_id}.{self.dataset_id}.multimodal_embedding_model"
-            
-    #         query = f"""
-    #         CREATE OR REPLACE MODEL `{model_id}`
-    #         REMOTE WITH CONNECTION `{self.location}.plasma_line_remote_model`
-    #         OPTIONS (endpoint = 'multimodalembedding@001');
-    #         """
-            
-    #         query_job = self.bq_client.query(query)
-    #         query_job.result()
-            
-    #         return model_id
-            
-    #     except Exception as e:
-    #         logger.error(f"Error creating multimodal model: {str(e)}")
-    #         raise
 
 
     # 較彈性，先上傳到 Cloud Storage，再從 Storage 上傳到 BigQuery
@@ -324,7 +325,7 @@ class EmbeddingProcessor:
         from google.cloud import storage
         import uuid
         blob_name = f"temp_embeddings_{uuid.uuid4()}.json"
-        bucket_name = GCP_BUCKET_NAME
+        bucket_name = Config.GCP_BUCKET_NAME
         storage_client = storage.Client(project=self.project_id)
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(blob_name)
@@ -357,91 +358,6 @@ class EmbeddingProcessor:
         # 若需要，刪除 GCS 暫存檔案
         # blob.delete()
         # logger.info("Temporary file removed from GCS.")
-
-
-    # # 上傳拆成總共 500 次插入行為 (還是 < 1000 次)
-    # def batch_insert_embeddings(self):
-    #     """
-    #     一次性將 self.embedding_buffer 中的所有 embedding 寫入 BigQuery。
-    #     藉由一次性 INSERT 多筆資料的方式，大幅減少對 table 的操作次數。
-    #     """
-    #     if not self.embedding_buffer:
-    #         logger.info("No embeddings to insert, buffer is empty.")
-    #         return
-
-    #     # 建立 embeddings 表 (若不存在)
-    #     create_table_query = f"""
-    #     CREATE TABLE IF NOT EXISTS `{self.project_id}.rag_system.embeddings`
-    #     (
-    #         embedding_id STRING,
-    #         vector ARRAY<FLOAT64>,
-    #         content_type STRING,
-    #         doc_id STRING,
-    #         page_num INTEGER,
-    #         element_id STRING,
-    #         mapped_to_element_id STRING,
-    #         coordinates JSON,
-    #         created_at TIMESTAMP
-    #     );
-    #     """
-    #     self.bq_client.query(create_table_query).result()
-
-    #     # 將 buffer 中的資料轉換成可插入的參數
-    #     rows = []
-    #     for emb in self.embedding_buffer:
-    #         rows.append((
-    #             emb["embedding_id"],
-    #             emb["vector"],
-    #             emb["content_type"],
-    #             emb["doc_id"],
-    #             emb["page_num"],
-    #             emb["element_id"],
-    #             emb["mapped_to_element_id"],
-    #             json.dumps(emb["coordinates"]) if emb["coordinates"] else None
-    #         ))
-
-    #     total_rows = len(rows)
-    #     logger.info(f"Total rows to insert: {total_rows}")
-    #     batch_size = int(GCP_BIGQUERY_INSERT_BATCH)
-
-    #     # 分批處理 rows
-    #     for batch_start in range(0, total_rows, batch_size):
-    #         batch_rows = rows[batch_start: batch_start + batch_size]
-
-    #         parameters = []
-    #         row_placeholders = []
-    #         for i, row in enumerate(batch_rows):
-    #             idx = batch_start + i
-    #             parameters.extend([
-    #                 bigquery.ScalarQueryParameter(f"embedding_id_{idx}", "STRING", row[0]),
-    #                 bigquery.ArrayQueryParameter(f"vector_{idx}", "FLOAT64", row[1]),
-    #                 bigquery.ScalarQueryParameter(f"content_type_{idx}", "STRING", row[2]),
-    #                 bigquery.ScalarQueryParameter(f"doc_id_{idx}", "STRING", row[3]),
-    #                 bigquery.ScalarQueryParameter(f"page_num_{idx}", "INTEGER", row[4]),
-    #                 bigquery.ScalarQueryParameter(f"element_id_{idx}", "STRING", row[5]),
-    #                 bigquery.ScalarQueryParameter(f"mapped_to_element_id_{idx}", "STRING", row[6]),
-    #                 bigquery.ScalarQueryParameter(f"coordinates_{idx}", "JSON", row[7])
-    #             ])
-    #             row_placeholders.append(
-    #                 f"(@embedding_id_{idx}, @vector_{idx}, @content_type_{idx}, @doc_id_{idx}, @page_num_{idx}, "
-    #                 f"@element_id_{idx}, @mapped_to_element_id_{idx}, @coordinates_{idx}, CURRENT_TIMESTAMP())"
-    #             )
-
-    #         insert_query = f"""
-    #         INSERT INTO `{self.project_id}.rag_system.embeddings`
-    #         (embedding_id, vector, content_type, doc_id, page_num, element_id, mapped_to_element_id, coordinates, created_at)
-    #         VALUES {", ".join(row_placeholders)}
-    #         """
-
-    #         job_config = bigquery.QueryJobConfig(query_parameters=parameters)
-    #         logger.info(f"Inserting batch from row {batch_start} to {batch_start + len(batch_rows) - 1}, size: {len(batch_rows)}")
-    #         self.bq_client.query(insert_query, job_config=job_config).result()
-
-    #     # 清空 buffer
-    #     self.embedding_buffer.clear()
-    #     logger.info("All batch insert of embeddings completed.")
-
-
 
     def _store_embedding(self, embedding_id: str, vector: List[float], 
                         content_type: str, source_info: Optional[Dict[str, Any]] = None):

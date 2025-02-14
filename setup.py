@@ -51,6 +51,15 @@ setup(
         'tenacity>=8.2.0',
         'xmltodict',
         'cloud-sql-python-connector',
+        'google-cloud-bigquery>=3.0.0',
+        'google-cloud-storage>=2.10.0',
+        'google-cloud-aiplatform>=1.36.0',
+        'pymysql>=1.0.0',
+        'cryptography>=41.0.0',
+        "opencv-python",
+        "doclayout_yolo",
+        "google-cloud-vision",
+        "pymupdf"
     ],
     extras_require={
         'dev': [
@@ -79,15 +88,6 @@ setup(
         ],
         'postgres': [
             'psycopg2-binary>=2.9.0',
-        ],
-        'mysql': [
-            'pymysql>=1.0.0',
-            'cryptography>=41.0.0',
-        ],
-        'gcp': [
-            'google-cloud-bigquery>=3.0.0',
-            'google-cloud-storage>=2.10.0',
-            'google-cloud-aiplatform>=1.36.0',
         ],
     },
     classifiers=[
