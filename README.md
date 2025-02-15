@@ -68,12 +68,6 @@ GCP_CONNECTION_ID=""         # BigQuery connection ID
 GCP_BIGQUERY_INSERT_BATCH=500      # Batch size for insertions
 ```
 
-3. Load environment variables:
-```python
-from dotenv import load_dotenv
-load_dotenv()  # Load variables from .env file
-```
-
 ## Usage
 
 DocIntelligence offers two main processing modes:
@@ -83,6 +77,9 @@ Perfect for smaller projects or testing. Stores results locally:
 
 ```python
 from DocIntelligence import DocIntelligence
+from dotenv import load_dotenv
+
+load_dotenv()  # Load variables from .env file
 
 engine = DocIntelligence()
 
@@ -90,8 +87,8 @@ engine = DocIntelligence()
 elements, documents, embeddings = engine.process_documents(
     input_dir="./Documents/",
     output_dir="./Output/",
-    store_to_db=False,    # Store locally
-    cloud_storage=False   # Don't use GCP
+    store_to_db=False,    # False => Store locally, True => Store in BigQuery
+    cloud_storage=False   # False => Store locally, True => Store in Google Cloud Storage
 )
 ```
 
@@ -106,7 +103,7 @@ engine.process_documents(
     input_dir="./Documents/",
     output_dir="./Output/",
     store_to_db=True,     # Store in BigQuery
-    cloud_storage=True    # Use Cloud Storage
+    cloud_storage=True    # Use Google Cloud Storage
 )
 ```
 
