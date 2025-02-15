@@ -50,66 +50,17 @@ class GCPIntegration:
             )
 
             # try to init bucket
-            self.bucket = self.storage_client.bucket(bucket_name)
-            if not self.bucket.exists():
-                self.bucket = self.storage_client.create_bucket(bucket_name)
+            if bucket_name:
+                self.bucket = self.storage_client.bucket(bucket_name)
+                if not self.bucket.exists():
+                    self.bucket = self.storage_client.create_bucket(bucket_name)
+            else:
+                self.bucket = None
 
             logger.info("GCP services initialized successfully")
 
         except Exception as e:
             logger.error(f"Error initializing GCP services: {str(e)}")
-            raise
-
-    def download_and_encode_image(self, gcs_uri: str) -> Optional[str]:
-        """Download image from GCS and encode to base64"""
-        try:
-            # Extract blob name from GCS URI
-            if not gcs_uri.startswith('gs://'):
-                raise ValueError(f"Invalid GCS URI: {gcs_uri}")
-            
-            bucket_name = gcs_uri.split('/')[2]
-            blob_name = '/'.join(gcs_uri.split('/')[3:])
-            
-            # Create temporary file
-            import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_file:
-                temp_path = temp_file.name
-            
-            # Download blob
-            bucket = self.storage_client.bucket(bucket_name)
-            blob = bucket.blob(blob_name)
-            blob.download_to_filename(temp_path)
-            
-            # Read and encode
-            with open(temp_path, 'rb') as image_file:
-                encoded = base64.standard_b64encode(image_file.read()).decode('utf-8')
-            
-            # Clean up
-            import os
-            os.unlink(temp_path)
-            
-            return encoded
-            
-        except Exception as e:
-            logger.error(f"Error downloading/encoding image: {str(e)}")
-            return None
-
-    def generate_gcs_url(self, blob_name: str, public: bool = False) -> str:
-        try:
-            # 生成 GCS URL 時也對 blob_name 進行 quote，以避免空白或特殊字元問題
-            encoded_blob_name = quote(blob_name)
-            blob = self.bucket.blob(blob_name)
-            if public:
-                return f"https://storage.googleapis.com/{self.bucket_name}/{encoded_blob_name}"
-            else:
-                # 簽名URL不需再次quote, blob自行處理
-                return blob.generate_signed_url(
-                    version="v4",
-                    expiration=datetime.timedelta(hours=1),
-                    method="GET"
-                )
-        except Exception as e:
-            logger.error(f"Error generating GCS URL: {str(e)}")
             raise
 
     def upload_to_storage(self, file_path: Path, destination_blob_name: str) -> str:
@@ -123,7 +74,11 @@ class GCPIntegration:
             destination_blob_name = quote(destination_blob_name)
             
             # 檢查 bucket 是否存在
-            if not self.bucket.exists():
+                
+
+            if self.bucket is None:
+                raise ValueError("GCP_BUCKET is not provided in the environment, please check the .env file")
+            elif not self.bucket.exists():
                 raise ValueError(f"Bucket {self.bucket_name} does not exist")
                 
             # 上傳檔案
@@ -164,27 +119,6 @@ class GCPIntegration:
             query_job.result()
         except Exception as e:
             logger.error(f"Error storing document metadata: {str(e)}")
-            raise
-
-    def store_page_metadata(self, doc_id: str, page_num: int, storage_path: str):
-        try:
-            query = f"""
-            INSERT INTO `{self.project_id}.rag_system.pages`
-            (doc_id, page_num, storage_path)
-            VALUES
-            (@doc_id, @page_num, @storage_path)
-            """
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("doc_id", "STRING", doc_id),
-                    bigquery.ScalarQueryParameter("page_num", "INTEGER", page_num),
-                    bigquery.ScalarQueryParameter("storage_path", "STRING", storage_path)
-                ]
-            )
-            query_job = self.bigquery_client.query(query, job_config=job_config)
-            query_job.result()
-        except Exception as e:
-            logger.error(f"Error storing page metadata: {str(e)}")
             raise
 
     def store_element_metadata(self, doc_id: str, page_num: int, element_type: str,
@@ -284,99 +218,3 @@ class GCPIntegration:
         except Exception as e:
             logger.error(f"Error setting up BigQuery tables: {str(e)}")
             raise
-
-    def create_vector_index(self):
-        try:
-            query = f"""
-            CREATE OR REPLACE VECTOR INDEX text_embeddings_index
-            ON `{self.project_id}.rag_system.elements`(embedding_id)
-            OPTIONS(
-                index_type='IVF',
-                distance_type='COSINE'
-            );
-            """
-            query_job = self.bigquery_client.query(query)
-            query_job.result()
-            logger.info("Vector index created successfully")
-        except Exception as e:
-            logger.error(f"Error creating vector index: {str(e)}")
-            raise
-
-    def generate_resource_urls(self, doc_id: str, page_num: int, element_id: str) -> Dict[str, str]:
-        """
-        生成資源的訪問 URLs
-        
-        Args:
-            doc_id: 文檔 ID
-            page_num: 頁碼
-            element_id: 元素 ID
-            
-        Returns:
-            包含各種資源 URL 的字典
-        """
-        try:
-            # 將所有路徑使用相對安全的名稱格式
-            safe_doc_id = quote(doc_id)
-            element_path = f"documents/{safe_doc_id}/elements/{element_id}"
-            document_path = f"documents/{safe_doc_id}/{safe_doc_id}.pdf"
-            page_path = f"documents/{safe_doc_id}/pages/page_{page_num}.png"
-            
-            # 生成帶有一小時過期時間的簽名 URLs
-            exp_time = datetime.timedelta(hours=1)
-            
-            urls = {
-                'element': f"https://console.cloud.google.com/bigquery?project={self.project_id}&p={self.project_id}&d=rag_system&t=elements&page=table"
-            }
-            
-            try:
-                element_blob = self.bucket.blob(element_path)
-                if element_blob.exists():
-                    urls['content'] = element_blob.generate_signed_url(
-                        expiration=exp_time,
-                        version="v4",
-                        method="GET"
-                    )
-                else:
-                    urls['content'] = ''
-            except Exception as e:
-                logger.warning(f"Error generating content URL: {str(e)}")
-                urls['content'] = ''
-                
-            try:
-                document_blob = self.bucket.blob(document_path)
-                if document_blob.exists():
-                    urls['document'] = document_blob.generate_signed_url(
-                        expiration=exp_time,
-                        version="v4",
-                        method="GET"
-                    )
-                else:
-                    urls['document'] = ''
-            except Exception as e:
-                logger.warning(f"Error generating document URL: {str(e)}")
-                urls['document'] = ''
-                
-            try:
-                page_blob = self.bucket.blob(page_path)
-                if page_blob.exists():
-                    urls['page'] = page_blob.generate_signed_url(
-                        expiration=exp_time,
-                        version="v4",
-                        method="GET"
-                    )
-                else:
-                    urls['page'] = ''
-            except Exception as e:
-                logger.warning(f"Error generating page URL: {str(e)}")
-                urls['page'] = ''
-                
-            return urls
-            
-        except Exception as e:
-            logger.error(f"Error generating resource URLs: {str(e)}")
-            return {
-                'content': '',
-                'document': '',
-                'page': '',
-                'element': ''
-            }
