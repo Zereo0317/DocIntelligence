@@ -1,70 +1,132 @@
 # DocIntelligence
 
-A Python package that extracts, analyzes and indexes content from PDF documents. It automatically detects page layouts, extracts text/tables/images, and generates searchable embeddings - making documents ready for RAG applications.
+[![Python Version](https://img.shields.io/badge/python-≥3.10-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-## What It Does
+`DocIntelligence` is a powerful document processing engine that transforms PDFs into structured, searchable knowledge bases. It combines advanced layout analysis with intelligent content extraction to make your documents truly AI-ready for RAG (Retrieval-Augmented Generation) applications.
 
-DocIntelligence breaks down PDF documents into structured, searchable components:
+## Background
 
-- Detects and extracts text, tables, images, formulas, and captions
-- Preserves document structure (chapters, sections, hierarchies) 
-- Generates vector embeddings for similarity search
-- Stores processed content locally or in cloud (GCP)
+In today's AI-driven world, RAG (Retrieval-Augmented Generation) has become essential for creating AI applications that can access and reason about specific document collections. While many excellent open-source PDF processors rely solely on OCR (Optical Character Recognition), they often struggle with:
 
-## How to Use
+- Complex document layouts
+- Mixed content types (text, tables, images, formulas)
+- Maintaining document structure and hierarchy
+- Generating high-quality embeddings for semantic search
 
-1. Clone this Repo:
+DocIntelligence addresses these challenges by combining advanced layout analysis with intelligent content extraction, making your documents truly AI-ready.
+
+## Key Features
+
+| Feature | Description | Benefit |
+|---------|-------------|----------|
+| 🔍 Smart Layout Analysis | Automatically detects and preserves document structure | Maintains context and relationships between elements |
+| 📊 Multi-Modal Extraction | Handles text, tables, images, and formulas | Complete document understanding |
+| 🧠 Semantic Embeddings | Generates vector embeddings for all content | Enables powerful similarity search |
+| ☁️ Flexible Storage | Store locally or in Google Cloud (BigQuery/Storage) | Scales with your needs |
+| 🔗 Knowledge Base Ready | Structured output perfect for RAG applications | Build smarter AI applications |
+
+## Installation
+
+1. Clone the repository:
 ```bash
 git clone https://github.com/Zereo0317/DocIntelligence.git
-
-cd ./DocIntelligence
+cd DocIntelligence
 ```
 
-2. Install this package:
+2. Install dependencies:
 ```bash
-pip install -e .
+pip install -e .  # Install DocIntelligence in development mode
 ```
 
-3. Set environment variables for Google Cloud Platform:
+## Google Cloud Setup
+
+`DocIntelligence` uses Google Cloud Platform (GCP) for OCR and optionally for enhanced storage features. You can set up your environment using tools like [`python-dotenv`](https://pypi.org/project/python-dotenv/) or [`direnv`](https://direnv.net/).
+
+1. Set up GCP Authentication:
+   - Create a [Google Cloud Project](https://console.cloud.google.com/)
+   - Enable the [Cloud Vision API](https://console.cloud.google.com/apis/library/vision.googleapis.com)
+   - Create a [Service Account](https://console.cloud.google.com/iam-admin/serviceaccounts) with these roles:
+     - `Cloud Vision API User`
+     - `Storage Object Viewer` (if using Cloud Storage)
+     - `BigQuery Data Editor` (if using BigQuery)
+   - Download the JSON key file
+
+2. Create a `.env` file in your project root:
 ```bash
-# Google Cloud Platform (required for OCR)
-GCP_PROJECT_ID=""              # Project ID
-GCP_LOCATION=""               # Service location
+# Required: Google Cloud Vision API for OCR
+GCP_PROJECT_ID=""              # Your GCP Project ID
+GCP_LOCATION=""               # Service location (defaults to us-central1)
 
-# Cloud Storage (Optional for storing visual & tabular context)
-GCP_BUCKET_NAME=""            # Cloud Storage Bucket for storing PDFs
+# Optional: Cloud Storage for visual & tabular content
+GCP_BUCKET_NAME=""            # Cloud Storage bucket name
+GOOGLE_APPLICATION_CREDENTIALS=""   # Path to service account JSON file
 
-# BigQuery (Optional for embedding generation & storing)
-GCP_DATASET_ID=""            # BigQuery Dataset
-GCP_CONNECTION_ID=""         # BigQuery Model Connection
-GOOGLE_APPLICATION_CREDENTIALS=""   # Path to the JSON file of the service account
-GCP_BIGQUERY_INSERT_BATCH=500      # Number of rows to insert in a single batch
+# Optional: BigQuery for embeddings & search
+GCP_DATASET_ID=""            # BigQuery dataset name
+GCP_CONNECTION_ID=""         # BigQuery connection ID
+GCP_BIGQUERY_INSERT_BATCH=500      # Batch size for insertions
 ```
 
-4. Process documents:
+3. Load environment variables:
+```python
+from dotenv import load_dotenv
+load_dotenv()  # Load variables from .env file
+```
+
+## Usage
+
+DocIntelligence offers two main processing modes:
+
+### Local Processing
+Perfect for smaller projects or testing. Stores results locally:
+
 ```python
 from DocIntelligence import DocIntelligence
 
-# Initialize engine
-engine = DocIntelligence(use_gpu_yolo=False)
+engine = DocIntelligence()
 
-# Local processing - returns extracted elements, documents and embeddings
+# Process documents and get results directly
 elements, documents, embeddings = engine.process_documents(
     input_dir="./Documents/",
-    output_dir="./Output/"
-)
-
-# Cloud processing - stores results in GCP and returns None
-result = engine.process_documents(
-    input_dir="./Documents/",
     output_dir="./Output/",
-    store_to_db=True,
-    cloud_storage=True
+    store_to_db=False,    # Store locally
+    cloud_storage=False   # Don't use GCP
 )
 ```
 
-* When `store_to_db=False`, extracted contents (including pictures and tables) will be stored in the output directory (defaults to "./output/"). 
-* When `cloud_storage=False`, elements will not be stored in BigQuery.
+### Cloud Processing
+Ideal for large-scale applications. Stores results in GCP:
+
+```python
+engine = DocIntelligence()
+
+# Process and store in GCP
+engine.process_documents(
+    input_dir="./Documents/",
+    output_dir="./Output/",
+    store_to_db=True,     # Store in BigQuery
+    cloud_storage=True    # Use Cloud Storage
+)
+```
+
+### Understanding Storage Options
+
+- `store_to_db=False`: Results are stored in the local output directory
+  - Extracted text stored as JSON
+  - Images and tables saved as files
+  - Embeddings returned as Python objects
+  
+- `store_to_db=True`: Results are stored in BigQuery
+  - Structured data stored in tables
+  - Enables fast querying and search
+  - Perfect for production deployments
+
+- `cloud_storage=False`: Visual elements stored locally
+- `cloud_storage=True`: Visual elements stored in Google Cloud Storage
+  - Better for sharing and scalability
+  - Enables cloud-based processing
 
 ## Return Values Structure
 
@@ -117,28 +179,52 @@ List of vector embeddings:
 }
 ```
 
-## Output Directory Structure
+## Output Structure
 
 ```
 Output/
 └── {document_name}/
-    ├── images/         # Extracted page images
-    ├── labeled/        # Detected elements
-    │   ├── text/
-    │   ├── table/
-    │   ├── formula/
-    │   └── picture/
+    ├── images/         # Page images
+    ├── labeled/        # Extracted elements
+    │   ├── text/      # Text blocks
+    │   ├── table/     # Table images
+    │   ├── formula/   # Mathematical formulas
+    │   └── picture/   # Figures and diagrams
     └── ocr/           # Processed content
-        ├── text/
-        ├── table/
-        └── caption/
+        ├── text/      # OCR results
+        ├── table/     # Table data
+        └── caption/   # Image captions
 ```
+
+## Contributing
+
+We welcome contributions! Here's how you can help:
+
+1. Check our [Issues](https://github.com/Zereo0317/DocIntelligence/issues) for tasks
+2. Fork the repository and create a new branch
+3. Submit a Pull Request with your changes
+4. Join our community discussions
+
+## Future Roadmap
+
+We're actively developing new features to make `DocIntelligence` even more powerful:
+
+1. **Knowledge Graph Integration**
+   - Automatically build knowledge graphs from documents
+   - Discover relationships between concepts
+   - Enable graph-based querying
+
+2. **AgentBasis Integration**
+   - Seamless connection to our upcoming AgentBasis framework
+   - Build intelligent agents that can reason over your documents
+   - Create powerful RAG applications with minimal code
 
 ## Requirements
 
 - Python ≥ 3.10
-- Google Cloud Vision API (required for OCR)
-- Optional GCP services for cloud storage and search:
-  - Cloud Storage 
-  - BigQuery
-  - Service account with appropriate permissions
+- Google Cloud Vision API (for OCR)
+- Optional: Google Cloud Storage and BigQuery (for cloud features)
+
+## License
+
+`DocIntelligence` is released under the MIT License. You are free to use, modify, and distribute the code for both commercial and non-commercial purposes.

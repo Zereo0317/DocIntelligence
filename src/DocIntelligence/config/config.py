@@ -32,7 +32,7 @@ class Config:
     @classmethod
     def validate(cls):
         """Ensure required environment variables are set."""
-        required_vars = ["GCP_PROJECT_ID", "GCP_BUCKET_NAME"]
+        required_vars = ["GCP_PROJECT_ID"]
         missing_vars = [var for var in required_vars if not getattr(cls, var)]
         if missing_vars:
             raise ValueError(f"Missing required Google Cloud environment variables: {', '.join(missing_vars)}")
