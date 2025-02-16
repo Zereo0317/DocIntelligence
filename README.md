@@ -2,6 +2,9 @@
 
 [![Python Version](https://img.shields.io/badge/python-≥3.10-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Email](https://img.shields.io/badge/Email-zereo%40zereo--ai.com-red.svg)](mailto:zereo@zereo-ai.com)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Zereo-blue.svg)](https://www.linkedin.com/in/zereo/)
+[![Medium](https://img.shields.io/badge/Medium-zereo0317-black.svg)](https://zereo0317.medium.com/)
 
 `DocIntelligence` is a powerful document processing engine that transforms PDFs into structured, searchable knowledge bases. It combines advanced layout analysis with intelligent content extraction to make your documents truly AI-ready for RAG (Retrieval-Augmented Generation) applications.
 
@@ -76,10 +79,9 @@ DocIntelligence offers two main processing modes:
 Perfect for smaller projects or testing. Stores results locally:
 
 ```python
-from DocIntelligence import DocIntelligence
 from dotenv import load_dotenv
-
 load_dotenv()  # Load variables from .env file
+from DocIntelligence import DocIntelligence
 
 engine = DocIntelligence()
 
@@ -200,6 +202,8 @@ We welcome contributions! Here's how you can help:
 2. Fork the repository and create a new branch
 3. Submit a Pull Request with your changes
 4. Join our community discussions
+
+Need technical support or want to connect? Feel free to email Zereo at zereo@zereo-ai.com or connect on [LinkedIn](https://www.linkedin.com/in/zereo/). We're always happy to help!
 
 ## Future Roadmap
 
