@@ -7,10 +7,12 @@ logger.setLevel(logging.DEBUG)
 load_dotenv()
 
 from DocIntelligence import DocIntelligence
+# from DocIntelligence.config import Config
 
+## Check the environment variables
+# Config.print_all_env_vars()
 
 engine = DocIntelligence(use_gpu_yolo=False)
-
 
 # The results is None
 results = engine.process_documents(
