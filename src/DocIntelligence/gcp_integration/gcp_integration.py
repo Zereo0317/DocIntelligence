@@ -3,6 +3,7 @@
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
+import functools
 from google.cloud import storage, bigquery, vision
 import json
 import datetime
@@ -12,25 +13,31 @@ from google.oauth2 import service_account
 
 logger = logging.getLogger(__name__)
 
+from DocIntelligence.config import Config
+
+def require_bucket(func):
+    """Decorator to ensure self.bucket is not None before calling the function"""
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if self.bucket is None:
+            raise ValueError("GCP_BUCKET is not provided in the environment, please check the .env file")
+        return func(self, *args, **kwargs)
+    return wrapper
+
+
 class GCPIntegration:
-    def __init__(self, project_id: str, bucket_name: str, credentials_path: str = None, credentials_json: str = None):
+    def __init__(self):
         """
         Initialize GCP services integration
         """
         try:
-            self.project_id = project_id
-            self.bucket_name = bucket_name
+            self.project_id = Config.GCP_PROJECT_ID
+            self.bucket_name = Config.GCP_BUCKET_NAME
 
             # 載入服務帳戶憑證
-            if credentials_path:
+            if Config.GCP_APPLICATION_CREDENTIALS:
                 credentials = service_account.Credentials.from_service_account_file(
-                    credentials_path
-                )
-            elif credentials_json:
-                import json
-                credentials_info = json.loads(credentials_json)
-                credentials = service_account.Credentials.from_service_account_info(
-                    credentials_info
+                    Config.GCP_APPLICATION_CREDENTIALS
                 )
             else:
                 # 嘗試從環境變量加載憑證
@@ -38,11 +45,11 @@ class GCPIntegration:
 
             # 使用服務帳戶憑證初始化客戶端
             self.storage_client = storage.Client(
-                project=project_id,
+                project=self.project_id,
                 credentials=credentials
             )
             self.bigquery_client = bigquery.Client(
-                project=project_id,
+                project=self.project_id,
                 credentials=credentials
             )
             self.vision_client = vision.ImageAnnotatorClient(
@@ -50,10 +57,10 @@ class GCPIntegration:
             )
 
             # try to init bucket
-            if bucket_name:
-                self.bucket = self.storage_client.bucket(bucket_name)
+            if self.bucket_name:
+                self.bucket = self.storage_client.bucket(self.bucket_name)
                 if not self.bucket.exists():
-                    self.bucket = self.storage_client.create_bucket(bucket_name)
+                    self.bucket = self.storage_client.create_bucket(self.bucket_name)
             else:
                 self.bucket = None
 
@@ -63,6 +70,7 @@ class GCPIntegration:
             logger.error(f"Error initializing GCP services: {str(e)}")
             raise
 
+    @require_bucket
     def upload_to_storage(self, file_path: Path, destination_blob_name: str) -> str:
         """上傳文件到 Cloud Storage"""
         try:
@@ -74,11 +82,7 @@ class GCPIntegration:
             destination_blob_name = quote(destination_blob_name)
             
             # 檢查 bucket 是否存在
-                
-
-            if self.bucket is None:
-                raise ValueError("GCP_BUCKET is not provided in the environment, please check the .env file")
-            elif not self.bucket.exists():
+            if not self.bucket.exists():
                 raise ValueError(f"Bucket {self.bucket_name} does not exist")
                 
             # 上傳檔案

@@ -14,7 +14,7 @@ from DocIntelligence.config import Config
 
 
 class EmbeddingProcessor:
-    def __init__(self, project_id: str, location: str = "us-central1"):
+    def __init__(self):
         """
         Initialize the embedding processor
         
@@ -23,20 +23,20 @@ class EmbeddingProcessor:
             location (str): GCP region for Vertex AI
         """
         try:
-            self.project_id = project_id
-            self.location = location
+            self.project_id = Config.GCP_PROJECT_ID
+            self.location = Config.GCP_LOCATION
             self.dataset_id = Config.GCP_DATASET_ID  # 資料集名稱
             self.connection_id = Config.GCP_CONNECTION_ID
-            self.connection_string = f"{project_id}.{location}.{self.connection_id}"
+            self.connection_string = f"{self.project_id}.{self.location}.{self.connection_id}"
 
             # Initialize Vertex AI
             aiplatform.init(
-                project=project_id,
-                location=location
+                project=self.project_id,
+                location=self.location
             )
             
             # Initialize BigQuery client
-            self.bq_client = bigquery.Client(project=project_id)
+            self.bq_client = bigquery.Client(project=self.project_id)
             
             logger.info("Embedding processor initialized successfully")
             self.embedding_buffer = []

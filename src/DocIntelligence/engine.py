@@ -37,12 +37,7 @@ class DocIntelligence:
             self.pdf_processor = PDFProcessor()
             self.layout_analyzer = LayoutAnalyzer(use_gpu=use_gpu_yolo)
             self.ocr_processor = OCRProcessor()
-            self.gcp_integration = GCPIntegration(
-                Config.GCP_PROJECT_ID, 
-                Config.GCP_BUCKET_NAME, 
-                credentials_path=Config.GCP_APPLICATION_CREDENTIALS
-            )
-            # self.embedding_processor = EmbeddingProcessor(Config.GCP_PROJECT_ID, Config.GCP_LOCATION)
+            self.gcp_integration = GCPIntegration()
             logger.info("DocIntelligence system initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing DocIntelligence system: {str(e)}")
@@ -56,7 +51,7 @@ class DocIntelligence:
 
         Args:
             input_dir (str): Path to the directory containing PDF documents.
-            output_dir (str, optional): Directory for output files. Defaults to Config.OUTPUT_DIR.
+            output_dir (str, optional): Directory for output files. Defaults to "Config.ROOTDIR / output" .
             chunk_size (int): Maximum chunk size for text splitting.
             overlap (int): Overlap between chunks.
             store_to_db (bool): Whether to store results to DB.
@@ -64,7 +59,7 @@ class DocIntelligence:
         """
         # 使用傳入的 input_dir 與 output_dir；若 output_dir 為 None 則使用 Config.OUTPUT_DIR
         input_path = Path(input_dir).resolve()
-        output_path = Path(output_dir).resolve() if output_dir else Config.OUTPUT_DIR
+        output_path = Path(output_dir).resolve() if output_dir else Config.ROOT_DIR / "output"
         
         logger.info(f"Input directory: {input_path}")
         logger.info(f"Output directory: {output_path}")
@@ -218,7 +213,7 @@ class DocIntelligence:
             # ----------------------------------------------------------------
             # (C) Chunk & Embedding Generation
             # ----------------------------------------------------------------
-            local_embedding_processor = EmbeddingProcessor(Config.GCP_PROJECT_ID, Config.GCP_LOCATION)
+            local_embedding_processor = EmbeddingProcessor()
 
             local_elements = []  # for accumulating embeddings when store_to_db is False
             # Iterate over each page's processed elements

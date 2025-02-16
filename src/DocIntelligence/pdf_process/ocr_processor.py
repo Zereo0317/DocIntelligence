@@ -1,5 +1,9 @@
+# TODO: 需要調整 _upload_to_gcs, _delete_from_gcs。當 self.bucket 不存在時 (表示不上傳到 GCS)，不應該執行上傳與刪除。
+
 import logging
 from pathlib import Path
+import functools
+import io
 from typing import Dict, Any, Optional, List
 from google.cloud import vision
 from google.cloud import storage
@@ -8,38 +12,19 @@ logger = logging.getLogger(__name__)
 
 from DocIntelligence.config import Config
 
-
 class OCRProcessor:
     def __init__(self):
         """Initialize Google Cloud Vision client"""
         try:
+            self.project_id = Config.GCP_PROJECT_ID
+
             self.vision_client = vision.ImageAnnotatorClient()
-            self.storage_client = storage.Client(project=Config.GCP_PROJECT_ID)
-            self.bucket = self.storage_client.bucket(Config.GCP_BUCKET_NAME)
+            self.storage_client = storage.Client(project=self.project_id)
+
             logger.info("Google Cloud Vision client initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing Google Cloud Vision client: {str(e)}")
             raise
-
-    def _upload_to_gcs(self, image_path: Path) -> Optional[str]:
-        """Upload image to Google Cloud Storage"""
-        try:
-            blob_name = f"temp/{image_path.name}"
-            blob = self.bucket.blob(blob_name)
-            blob.upload_from_filename(str(image_path))
-            return f"gs://{Config.GCP_BUCKET_NAME}/{blob_name}"
-        except Exception as e:
-            logger.error(f"Error uploading to GCS: {str(e)}")
-            return None
-
-    def _delete_from_gcs(self, gcs_uri: str):
-        """Delete temporary image from Google Cloud Storage"""
-        try:
-            blob_name = gcs_uri.split(f"gs://{Config.GCP_BUCKET_NAME}/")[1]
-            blob = self.bucket.blob(blob_name)
-            blob.delete()
-        except Exception as e:
-            logger.error(f"Error deleting from GCS: {str(e)}")
 
     def _process_text(self, response) -> Dict[str, Any]:
         if not response.text_annotations:
@@ -132,12 +117,11 @@ class OCRProcessor:
         """
         try:
             logger.info(f"Processing {element_type} from {image_path}")
-            gcs_uri = self._upload_to_gcs(image_path)
-            if not gcs_uri:
-                raise Exception("Failed to upload image to GCS")
 
-            image = vision.Image()
-            image.source.image_uri = gcs_uri
+            with io.open(image_path, 'rb') as image_file:
+                content = image_file.read()
+
+            image = vision.Image(content=content)
 
             if element_type == 'Table':
                 response = self.vision_client.document_text_detection(image=image)
@@ -162,7 +146,7 @@ class OCRProcessor:
                 else:
                     f.write(result['text'])
 
-            self._delete_from_gcs(gcs_uri)
+            # self._delete_from_gcs(gcs_uri)
             return result
 
         except Exception as e:
